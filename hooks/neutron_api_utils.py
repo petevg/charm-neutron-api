@@ -243,6 +243,33 @@ NEUTRON_DB_INIT_RKEY = 'neutron-db-initialised'
 NEUTRON_DB_INIT_ECHO_RKEY = 'neutron-db-initialised-echo'
 
 
+def neutron_db_manage_cmd(action, version):
+   """
+   Put together a call to the neutron-db-manage command on the
+   command line.
+
+   @@@Hack this is a temp fix for an Arista integration. The code
+   below should be replaced very soon with a more generalized way of
+   supporting multiple plugins, or plugins that require multiple
+   config files.
+
+   """
+   plugin = config('neutron-plugin')
+   cmd = [
+    'neutron-db-manage',
+    '--config-file', NEUTRON_CONF,
+    '--config-file', neutron_plugin_attribute(plugin,
+                                              'config',
+                                              'neutron'),
+   ]
+   if os.path.isfile('/etc/neutron/plugins/ml2/ml2_conf_arista.ini'):
+       cmd += ['--config-file', '/etc/neutron/plugins/ml2/ml2_conf_arista.ini']
+
+   cmd += [action, version]
+
+   return cmd
+
+
 def is_db_initialised(cluster_rid=None):
     """
     Check whether a db intialisation has been performed by any peer unit.
@@ -582,14 +609,7 @@ def do_openstack_upgrade(configs):
 def stamp_neutron_database(release):
     '''Stamp the database with the current release before upgrade.'''
     log('Stamping the neutron database with release %s.' % release)
-    plugin = config('neutron-plugin')
-    cmd = ['neutron-db-manage',
-           '--config-file', NEUTRON_CONF,
-           '--config-file', neutron_plugin_attribute(plugin,
-                                                     'config',
-                                                     'neutron'),
-           'stamp',
-           release]
+    cmd = neutron_db_manage_cmd('stamp', release)
     subprocess.check_output(cmd)
 
 
@@ -636,14 +656,7 @@ def migrate_neutron_database(upgrade=False):
        config('neutron-plugin') == 'vsp'):
         nuage_vsp_juno_neutron_migration()
     else:
-        plugin = config('neutron-plugin')
-        cmd = ['neutron-db-manage',
-               '--config-file', NEUTRON_CONF,
-               '--config-file', neutron_plugin_attribute(plugin,
-                                                         'config',
-                                                         'neutron'),
-               'upgrade',
-               'head']
+        cmd = neutron_db_manage_cmd('upgrade', 'head')
         subprocess.check_output(cmd)
 
     cluster_rids = relation_ids('cluster')
